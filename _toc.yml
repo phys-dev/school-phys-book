@@ -10,8 +10,12 @@ parts:
       - file: grade8/index
       - file: grade9/index
 
-  - caption: 8 класс · Тепловые явления
+  - caption: 8 класс · Строение вещества
     chapters:
       - file: grade8/lessons/01-mkt
       - file: grade8/lessons/02-massa-i-razmery
       - file: grade8/lessons/03-agregatnye-sostoyaniya
+      - file: grade8/lessons/04-svoystva-sostoyaniy
+      - file: grade8/lessons/05-kristally-i-amorfnye
+      - file: grade8/lessons/06-smachivanie-i-kapillyary
+      - file: grade8/lessons/07-teplovoe-rasshirenie

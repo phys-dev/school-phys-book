@@ -745,3 +745,455 @@ def scale_ladder():
              "Атом мал настолько же, насколько велика Галактика.",
         height=180,
     )
+
+
+_CRYSTAL = """
+  // Расплав охлаждается с той скоростью, которую вы задали. Медленное охлаждение
+  // даёт кристалл, быстрое — аморфное тело (стекло). Больше ничего не меняется.
+  const SIG = P.sigma, EPS = P.eps, RC = 2.5 * SIG, RC2 = RC * RC;
+  const DT = P.dt, SUB = P.sub, N = P.n;
+  let p = [], neigh = [], T = P.tHot, cooling = false, steps = 0;
+  function init() {
+    p = []; T = P.tHot; cooling = false; steps = 0;
+    for (let i = 0; i < N; i++) {
+      p.push({ x: 20 + Math.random() * (cv.width - 40),
+               y: 20 + Math.random() * (cv.height - 40),
+               vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 4,
+               fx: 0, fy: 0 });
+    }
+    neigh = new Array(N).fill(0);
+    forces();
+    const b = el("cool");
+    if (b) b.textContent = "Охладить расплав";
+  }
+  function forces() {
+    for (const q of p) { q.fx = 0; q.fy = P.g; }
+    neigh = new Array(p.length).fill(0);
+    for (let i = 0; i < p.length; i++)
+      for (let j = i + 1; j < p.length; j++) {
+        const dx = p[j].x - p[i].x, dy = p[j].y - p[i].y;
+        const r2 = dx * dx + dy * dy;
+        if (r2 > RC2 || r2 === 0) continue;
+        const s2 = SIG * SIG / r2, s6 = s2 * s2 * s2;
+        let f = 24 * EPS * (2 * s6 * s6 - s6) / r2;
+        f = Math.max(-P.fmax, Math.min(P.fmax, f));
+        p[i].fx -= f * dx; p[i].fy -= f * dy;
+        p[j].fx += f * dx; p[j].fy += f * dy;
+        if (r2 < 1.5 * SIG * SIG) { neigh[i]++; neigh[j]++; }
+      }
+  }
+  function wall(q) {
+    const m = 5;
+    if (q.x < m) { q.x = m; q.vx = Math.abs(q.vx); }
+    if (q.x > cv.width - m) { q.x = cv.width - m; q.vx = -Math.abs(q.vx); }
+    if (q.y < m) { q.y = m; q.vy = Math.abs(q.vy); }
+    if (q.y > cv.height - m) { q.y = cv.height - m; q.vy = -Math.abs(q.vy); }
+  }
+  function step() {
+    steps++;
+    for (let s = 0; s < SUB; s++) {
+      for (const q of p) {
+        q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT;
+        q.x += q.vx * DT; q.y += q.vy * DT;
+      }
+      forces();
+      for (const q of p) {
+        q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT;
+        wall(q);
+      }
+    }
+    if (cooling && T > P.tCold) {
+      T -= +el("rate").value * 2e-4;      // скорость охлаждения задаёт ползунок
+      if (T < P.tCold) T = P.tCold;
+    }
+    let ke = 0;
+    for (const q of p) ke += 0.5 * (q.vx * q.vx + q.vy * q.vy);
+    const cur = ke / p.length;
+    const k = Math.sqrt(1 + 0.05 * (T / Math.max(cur, 1e-6) - 1));
+    for (const q of p) { q.vx *= k; q.vy *= k; }
+  }
+  function order() {
+    // доля частиц, у которых ровно 6 соседей — в плоскости это признак
+    // правильной треугольной упаковки, то есть кристалла
+    let good = 0;
+    for (const n of neigh) if (n >= 5 && n <= 7) good++;
+    return good / neigh.length;
+  }
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, cv.width, cv.height);
+    const ord = order();
+    ctx.strokeStyle = "rgba(90, 105, 120, 0.3)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < p.length; i++)
+      for (let j = i + 1; j < p.length; j++) {
+        const dx = p[j].x - p[i].x, dy = p[j].y - p[i].y;
+        if (dx * dx + dy * dy < 1.4 * SIG * SIG) {
+          ctx.moveTo(p[i].x, p[i].y); ctx.lineTo(p[j].x, p[j].y);
+        }
+      }
+    ctx.stroke();
+    for (let i = 0; i < p.length; i++) {
+      // частицы с правильным окружением — синие, с нарушенным — оранжевые
+      const ok = neigh[i] >= 5 && neigh[i] <= 7;
+      ctx.beginPath(); ctx.arc(p[i].x, p[i].y, SIG * 0.4, 0, 7);
+      ctx.fillStyle = ok ? "#2f6690" : "#e07a5f"; ctx.fill();
+    }
+    let name, color;
+    if (T > P.tMelt) { name = "расплав (жидкость)"; color = "#d1495b"; }
+    else if (ord > P.ordCrystal) { name = "кристалл — порядок дальний"; color = "#2f6690"; }
+    else { name = "аморфное тело (стекло) — порядок только ближний"; color = "#e07a5f"; }
+    ctx.fillStyle = color; ctx.font = "600 14px system-ui";
+    ctx.fillText(name, 12, 22);
+    el("rate-v").textContent = (+el("rate").value / 10).toFixed(1);
+    out.textContent = "Температура: " + (T * 100).toFixed(0)
+      + "   ·   доля частиц с правильным окружением: " + (100 * ord).toFixed(0) + " %"
+      + (cooling ? "   ·   идёт охлаждение" : "   ·   нажмите «Охладить расплав»");
+  }
+  const cbtn = el("cool");
+  if (cbtn) cbtn.onclick = () => {
+    cooling = !cooling;
+    cbtn.textContent = cooling ? "Пауза охлаждения" : "Охладить расплав";
+  };
+"""
+
+
+def crystallization(n=220, rate=6):
+    """Кристалл или стекло — зависит от того, как быстро охлаждать расплав.
+
+    Модель начинается с горячей жидкости. Медленное охлаждение даёт молекулам
+    время занять места в решётке, и вырастает кристалл. При быстром охлаждении
+    молекулы застывают там, где их застигло, — получается аморфное тело.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + '<button data-name="cool">Охладить расплав</button>'
+        + _slider("rate", "Скорость охлаждения:", 1, 40, rate, 1)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "От расплава к кристаллу или к стеклу",
+        _CRYSTAL,
+        {"n": n, "sigma": 13.0, "eps": 1.0, "dt": 0.05, "sub": 3, "fmax": 6.0,
+         "g": 0.08, "tHot": 0.4, "tCold": 0.02, "tMelt": 0.25, "ordCrystal": 0.35},
+        controls,
+        hint="Сначала охладите расплав медленно (ползунок влево) — вырастет решётка. "
+             "Потом нажмите «Заново» и охладите быстро: получится стекло. "
+             "Синие частицы стоят правильно, оранжевые — с нарушением порядка.",
+        height=330,
+    )
+
+
+_WETTING = """
+  // Капля жидкости на поверхности. Молекулы притягиваются друг к другу (как всегда),
+  // а ползунок задаёт, насколько сильно они притягиваются к самой поверхности.
+  // Из соотношения этих двух притяжений и получается смачивание или несмачивание.
+  const SIG = P.sigma, EPS = P.eps, RC = 2.5 * SIG, RC2 = RC * RC;
+  const DT = P.dt, SUB = P.sub, N = P.n, FLOOR = cv.height - 26;
+  let p = [];
+  function wallPull() { return +el("w").value / 20; }
+  function init() {
+    p = [];
+    const cols = Math.ceil(Math.sqrt(N)), step = 1.1 * SIG;
+    const x0 = cv.width / 2 - cols * step / 2;
+    for (let i = 0; i < N; i++) {
+      p.push({ x: x0 + (i % cols) * step + Math.random(),
+               y: FLOOR - 10 - Math.floor(i / cols) * step,
+               vx: 0, vy: 0, fx: 0, fy: 0 });
+    }
+    forces();
+  }
+  function forces() {
+    const W = wallPull();
+    for (const q of p) {
+      q.fx = 0; q.fy = P.g;
+      const d = FLOOR - q.y;                       // расстояние до поверхности
+      if (d < 2.5 * SIG) q.fy += W * (1 - d / (2.5 * SIG));   // притяжение к стенке
+    }
+    for (let i = 0; i < p.length; i++)
+      for (let j = i + 1; j < p.length; j++) {
+        const dx = p[j].x - p[i].x, dy = p[j].y - p[i].y;
+        const r2 = dx * dx + dy * dy;
+        if (r2 > RC2 || r2 === 0) continue;
+        const s2 = SIG * SIG / r2, s6 = s2 * s2 * s2;
+        let f = 24 * EPS * (2 * s6 * s6 - s6) / r2;
+        f = Math.max(-P.fmax, Math.min(P.fmax, f));
+        p[i].fx -= f * dx; p[i].fy -= f * dy;
+        p[j].fx += f * dx; p[j].fy += f * dy;
+      }
+  }
+  function step() {
+    for (let s = 0; s < SUB; s++) {
+      for (const q of p) {
+        q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT;
+        q.x += q.vx * DT; q.y += q.vy * DT;
+      }
+      forces();
+      for (const q of p) {
+        q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT;
+        if (q.x < 6) { q.x = 6; q.vx = Math.abs(q.vx); }
+        if (q.x > cv.width - 6) { q.x = cv.width - 6; q.vx = -Math.abs(q.vx); }
+        if (q.y > FLOOR - 3) { q.y = FLOOR - 3; q.vy = -Math.abs(q.vy) * 0.5; }
+        if (q.y < 6) { q.y = 6; q.vy = Math.abs(q.vy); }
+      }
+    }
+    let ke = 0;
+    for (const q of p) ke += 0.5 * (q.vx * q.vx + q.vy * q.vy);
+    const k = Math.sqrt(1 + 0.05 * (P.temp / Math.max(ke / p.length, 1e-6) - 1));
+    for (const q of p) { q.vx *= k; q.vy *= k; }
+  }
+  function shape() {
+    const xs = p.map((q) => q.x), ys = p.map((q) => q.y);
+    const shirina = Math.max(...xs) - Math.min(...xs);
+    const vysota = FLOOR - Math.min(...ys);
+    return { shirina, vysota, otnoshenie: vysota / Math.max(shirina, 1) };
+  }
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#5b6570";
+    ctx.fillRect(0, FLOOR, cv.width, cv.height - FLOOR);   // поверхность
+    ctx.fillStyle = "#3a8fb7";
+    for (const q of p) { ctx.beginPath(); ctx.arc(q.x, q.y, SIG * 0.42, 0, 7); ctx.fill(); }
+    const s = shape();
+    const smachivaet = s.otnoshenie < P.porog;
+    ctx.fillStyle = smachivaet ? "#2a9d5c" : "#d1495b";
+    ctx.font = "600 14px system-ui";
+    ctx.fillText(smachivaet ? "жидкость смачивает поверхность — растекается"
+                            : "жидкость не смачивает — собирается в каплю", 12, 22);
+    el("w-v").textContent = wallPull().toFixed(1);
+    out.textContent = "Ширина капли: " + s.shirina.toFixed(0)
+      + "   ·   высота: " + s.vysota.toFixed(0)
+      + "   ·   отношение высоты к ширине: " + s.otnoshenie.toFixed(2)
+      + (smachivaet ? "   ·   притяжение к поверхности пересиливает"
+                    : "   ·   молекулы сильнее держатся друг за друга");
+  }
+"""
+
+
+def wetting(n=90, wall_pull=4):
+    """Смачивание и несмачивание: капля растекается или собирается в шарик.
+
+    Ползунок задаёт притяжение молекул жидкости к поверхности. Если оно больше
+    притяжения молекул друг к другу — жидкость растекается (смачивает), если
+    меньше — собирается в каплю (не смачивает). Ровно так это объясняет § 3.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("w", "Притяжение к поверхности:", 0, 24, wall_pull, 1)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "Смачивание: капля на поверхности",
+        _WETTING,
+        {"n": n, "sigma": 12.0, "eps": 1.0, "dt": 0.05, "sub": 6, "fmax": 6.0,
+         "g": 0.02, "temp": 0.12, "porog": 0.45},
+        controls,
+        hint="Слева ползунка — поверхность вроде жирной или воскованной: капля стоит "
+             "шариком. Справа — чистое стекло: вода растекается плёнкой.",
+        height=300,
+    )
+
+
+_CAPILLARY = """
+  // Подъём смачивающей жидкости в трубках разного радиуса.
+  // Высота считается по формуле h = 2σ cos θ / (ρ g r): чем тоньше трубка,
+  // тем выше поднимается жидкость.
+  const RHO = P.rho, G = P.g, SIGMA = P.sigma;
+  let t = 0;
+  const tubes = P.tubes;               // радиусы трубок в миллиметрах
+  function theta() { return +el("th").value; }     // краевой угол, градусы
+  function height(rmm) {
+    const r = rmm / 1000;
+    return 2 * SIGMA * Math.cos(theta() * Math.PI / 180) / (RHO * G * r);  // м
+  }
+  function init() { t = 0; }
+  function step() { t += 0.02; }
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, cv.width, cv.height);
+    const base = cv.height - 60, mash = P.mash;   // пикселей на метр подъёма
+    // сосуд с жидкостью
+    ctx.fillStyle = "rgba(58, 143, 183, 0.35)";
+    ctx.fillRect(0, base, cv.width, 60);
+    ctx.strokeStyle = "#5b6570"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, base); ctx.lineTo(cv.width, base); ctx.stroke();
+    const smachivaet = theta() < 90;
+    tubes.forEach((rmm, i) => {
+      const x = 90 + i * ((cv.width - 150) / (tubes.length - 1));
+      const w = Math.max(7, rmm * P.pxmm);          // ширина трубки на рисунке
+      let h = height(rmm) * mash;
+      h = Math.max(-base + 30, Math.min(base - 30, h));
+      // стенки трубки
+      ctx.strokeStyle = "#5b6570"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, 24); ctx.lineTo(x - w / 2, base + 45);
+      ctx.moveTo(x + w / 2, 24); ctx.lineTo(x + w / 2, base + 45);
+      ctx.stroke();
+      // столбик жидкости
+      ctx.fillStyle = "rgba(58, 143, 183, 0.75)";
+      const top = base - h;
+      ctx.fillRect(x - w / 2 + 1, Math.min(top, base), w - 2, Math.abs(h) + (h > 0 ? 0 : 0));
+      // мениск: вогнутый при смачивании, выпуклый при несмачивании
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2 + 1, top);
+      ctx.quadraticCurveTo(x, top + (smachivaet ? w * 0.5 : -w * 0.5), x + w / 2 - 1, top);
+      ctx.lineTo(x + w / 2 - 1, top + 4); ctx.lineTo(x - w / 2 + 1, top + 4);
+      ctx.closePath();
+      ctx.fillStyle = smachivaet ? "#fbfcfd" : "rgba(58, 143, 183, 0.75)";
+      ctx.fill();
+      // подписи
+      ctx.fillStyle = "#5b6570"; ctx.font = "11px system-ui"; ctx.textAlign = "center";
+      ctx.fillText("r = " + rmm + " мм", x, base + 58);
+      ctx.fillStyle = "#2f6690"; ctx.font = "600 12px system-ui";
+      const hmm = height(rmm) * 1000;
+      ctx.fillText((hmm >= 0 ? "+" : "") + hmm.toFixed(0) + " мм", x, Math.min(top, base) - 8);
+    });
+    ctx.textAlign = "left";
+    ctx.fillStyle = smachivaet ? "#2a9d5c" : "#d1495b";
+    ctx.font = "600 14px system-ui";
+    ctx.fillText(smachivaet ? "жидкость смачивает стенки — поднимается"
+                            : "жидкость не смачивает — опускается", 12, 18);
+    el("th-v").textContent = theta() + "°";
+    const h1 = height(tubes[0]) * 1000, h2 = height(tubes[tubes.length - 1]) * 1000;
+    out.textContent = "Высота подъёма обратно пропорциональна радиусу: "
+      + "в трубке " + tubes[0] + " мм — " + h1.toFixed(0) + " мм, "
+      + "в трубке " + tubes[tubes.length - 1] + " мм — " + h2.toFixed(0) + " мм. "
+      + "Радиус больше в " + (tubes[tubes.length - 1] / tubes[0]).toFixed(0)
+      + " раз — подъём во столько же раз меньше.";
+  }
+"""
+
+
+def capillary(theta=20):
+    """Капиллярные явления: чем тоньше трубка, тем выше поднимается жидкость.
+
+    Высота считается по формуле $h = 2\\sigma\\cos\\theta/(\\rho g r)$ для воды.
+    Ползунок меняет краевой угол: до 90° жидкость смачивает стенки и поднимается,
+    больше 90° — не смачивает и опускается, как ртуть в стеклянной трубке.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("th", "Краевой угол:", 0, 140, theta, 5, "°")
+        + "</div>"
+    )
+    return _build(
+        "Жидкость в капиллярах разного радиуса",
+        _CAPILLARY,
+        {"tubes": [0.1, 0.2, 0.5, 1.0, 2.0], "rho": 1000, "g": 9.8,
+         "sigma": 0.073, "mash": 900, "pxmm": 26},
+        controls,
+        hint="Поверхностное натяжение воды 0,073 Н/м. Обратите внимание на форму "
+             "поверхности: у смачивающей жидкости она вогнутая, у несмачивающей — выпуклая.",
+        height=330,
+    )
+
+
+_EXPANSION = """
+  // Почему тела расширяются при нагревании. Молекула колеблется в «яме»
+  // потенциальной энергии. Яма несимметрична: влево стенка круче, чем вправо.
+  // Поэтому с ростом энергии середина размаха уезжает вправо — среднее
+  // расстояние между молекулами растёт. Это и есть тепловое расширение.
+  const SIG = P.sigma, R0 = Math.pow(2, 1 / 6) * SIG;
+  let phase = 0;
+  function energy() { return -1 + +el("T").value / 100; }   // от -1 (дно ямы) вверх
+  function U(r) {
+    const x = SIG / r, x6 = Math.pow(x, 6);
+    return 4 * (x6 * x6 - x6);          // в единицах глубины ямы
+  }
+  function roots() {
+    // границы колебаний: там, где потенциальная энергия равна полной
+    const E = energy();
+    let a = R0, b = R0;
+    for (let r = R0; r > 0.8 * SIG; r -= 0.0005 * SIG) { if (U(r) >= E) { a = r; break; } }
+    for (let r = R0; r < 6 * SIG; r += 0.0005 * SIG) { if (U(r) >= E) { b = r; break; } }
+    return { a, b, sred: (a + b) / 2 };
+  }
+  function init() { phase = 0; }
+  function step() { phase += 0.06; }
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, cv.width, cv.height);
+    const { a, b, sred } = roots();
+    const E = energy();
+    const gx = 60, gy = 26, gw = cv.width - 100, gh = cv.height - 96;
+    const rmin = 0.95 * SIG, rmax = 3.2 * SIG;
+    const X = (r) => gx + gw * (r - rmin) / (rmax - rmin);
+    const Y = (u) => gy + gh * (u + 1.15) / 1.55;      // энергия от -1.15 до 0.4
+    // оси
+    ctx.strokeStyle = "#c9ced6"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(gx, Y(0)); ctx.lineTo(gx + gw, Y(0));
+    ctx.moveTo(gx, gy); ctx.lineTo(gx, gy + gh); ctx.stroke();
+    ctx.fillStyle = "#5b6570"; ctx.font = "11px system-ui";
+    ctx.fillText("энергия", 6, gy + 8);
+    ctx.fillText("расстояние между молекулами", gx + gw - 190, Y(0) + 16);
+    // кривая потенциальной энергии
+    ctx.strokeStyle = "#2f6690"; ctx.lineWidth = 2.2; ctx.beginPath();
+    for (let i = 0; i <= 400; i++) {
+      const r = rmin + (rmax - rmin) * i / 400;
+      const u = Math.max(-1.15, Math.min(0.4, U(r)));
+      i ? ctx.lineTo(X(r), Y(u)) : ctx.moveTo(X(r), Y(u));
+    }
+    ctx.stroke();
+    // уровень полной энергии — «потолок» колебаний
+    ctx.strokeStyle = "#d1495b"; ctx.lineWidth = 1.6; ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(X(a), Y(E)); ctx.lineTo(X(b), Y(E)); ctx.stroke();
+    ctx.setLineDash([]);
+    // положение равновесия и среднее положение
+    ctx.strokeStyle = "#9aa4b0"; ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X(R0), gy); ctx.lineTo(X(R0), gy + gh); ctx.stroke();
+    ctx.strokeStyle = "#e07a5f"; ctx.beginPath();
+    ctx.moveTo(X(sred), gy); ctx.lineTo(X(sred), gy + gh); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#9aa4b0"; ctx.fillText("r₀", X(R0) - 6, gy + gh + 14);
+    ctx.fillStyle = "#e07a5f"; ctx.fillText("среднее", X(sred) - 20, gy + gh + 28);
+    // колеблющаяся молекула
+    const r = sred + (b - a) / 2 * Math.cos(phase);
+    ctx.beginPath(); ctx.arc(X(r), Y(Math.min(U(r), E)), 6, 0, 7);
+    ctx.fillStyle = "#d1495b"; ctx.fill();
+    // две молекулы внизу: левая закреплена, правая колеблется
+    const yb = cv.height - 34;
+    ctx.beginPath(); ctx.arc(40, yb, 11, 0, 7); ctx.fillStyle = "#2f6690"; ctx.fill();
+    const scale = (cv.width - 150) / (3.2 * SIG);
+    ctx.beginPath(); ctx.arc(40 + r * scale, yb, 11, 0, 7);
+    ctx.fillStyle = "#3a8fb7"; ctx.fill();
+    ctx.strokeStyle = "#c9ced6"; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(40, yb); ctx.lineTo(40 + r * scale, yb); ctx.stroke();
+    ctx.setLineDash([]);
+    const rost = (sred / R0 - 1) * 100;
+    el("T-v").textContent = el("T").value;
+    out.textContent = "Ближняя граница колебаний: " + (a / R0).toFixed(3) + " r₀"
+      + "   ·   дальняя: " + (b / R0).toFixed(3) + " r₀"
+      + "   ·   среднее расстояние: " + (sred / R0).toFixed(3) + " r₀"
+      + "   ·   тело расширилось на " + rost.toFixed(1) + " %";
+  }
+"""
+
+
+def thermal_expansion(temperature=30):
+    """Тепловое расширение как следствие несимметричной «ямы» взаимодействия.
+
+    Если бы яма была симметричной, средний размах колебаний не смещался бы
+    и тело не расширялось. Но влево от положения равновесия отталкивание растёт
+    быстрее, чем притяжение вправо, — поэтому середина размаха с ростом
+    температуры уходит вправо. Это объяснение из § 4 учебника, рис. 8.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("T", "Температура (усл. ед.):", 2, 95, temperature, 1)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "Почему тела расширяются при нагревании",
+        _EXPANSION,
+        {"sigma": 40.0},
+        controls,
+        hint="Сравните расстояния от r₀ до левой и правой границ колебаний: "
+             "влево молекула отходит меньше, чем вправо. Именно из-за этого "
+             "среднее расстояние растёт, а тело расширяется.",
+        height=340,
+    )
