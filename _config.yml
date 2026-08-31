@@ -1,0 +1,52 @@
+title: Физика. 7–9 классы
+author: Федоров Вячеслав Васильевич, м.н.с. ИЯФ им. Г. И. Будкера СО РАН
+copyright: "2025–2026"
+logo: ""
+
+only_build_toc_files: true
+
+exclude_patterns:
+  - .venv
+  - _build
+  - .git
+  - "**.ipynb_checkpoints"
+  - README.md
+
+execute:
+  execute_notebooks: cache
+  timeout: 300
+  allow_errors: false
+
+parse:
+  myst_enable_extensions:
+    - amsmath
+    - dollarmath
+    - colon_fence
+    - deflist
+    - html_image
+    - substitution
+
+sphinx:
+  config:
+    language: ru
+    html_show_copyright: false
+    # MathJax копируется как есть (extra_path), иначе Jupyter Book подключит его
+    # вторым тегом сам — а два экземпляра ломают инициализацию
+    mathjax_path: ../tex-mml-svg.js
+    html_static_path: ['_static']
+    html_extra_path: ['_mathjax']
+    html_js_files: []
+    nb_merge_streams: true
+
+html:
+  use_issues_button: false
+  use_repository_button: true
+  use_edit_page_button: false
+  home_page_in_navbar: true
+  extra_footer: |
+    <p>Пособие составлено по учебнику И. М. Перышкина (2026), сборнику задач А. Е. Марона
+    и рабочей программе по физике 7–9 классов.</p>
+
+repository:
+  url: https://github.com/fuodorov/school-phys-book
+  branch: main

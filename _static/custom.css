@@ -1,0 +1,20 @@
+/* Блок настоящего опыта — выделяем ярче обычной врезки, чтобы его было видно
+   при беглом просмотре урока и удобно находить при подготовке к занятию. */
+div.admonition.opyt {
+  border-left: 5px solid #2a9d5c;
+  background: rgba(42, 157, 92, 0.07);
+}
+div.admonition.opyt > .admonition-title {
+  background: rgba(42, 157, 92, 0.18);
+}
+div.admonition.opyt > .admonition-title::after {
+  color: #2a9d5c;
+}
+div.admonition.opyt table { margin: 0.6em 0; }
+
+/* Техника безопасности внутри опыта */
+div.admonition.tb {
+  border-left: 5px solid #d1495b;
+  background: rgba(209, 73, 91, 0.07);
+}
+div.admonition.tb > .admonition-title { background: rgba(209, 73, 91, 0.16); }

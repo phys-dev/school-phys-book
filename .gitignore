@@ -1,0 +1,8 @@
+.venv/
+_build/
+__pycache__/
+*.pyc
+.jupyter_cache/
+.ipynb_checkpoints/
+.DS_Store
+*.egg-info/

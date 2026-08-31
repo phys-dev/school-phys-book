@@ -1,0 +1,17 @@
+# Оглавление пособия. Каждый класс — своя группа разделов; уроки лежат
+# в grade<N>/lessons/. Чтобы добавить урок, положите тетрадь в нужную папку
+# и впишите её файл в соответствующий раздел ниже.
+format: jb-book
+root: intro
+parts:
+  - caption: Программа по классам
+    chapters:
+      - file: grade7/index
+      - file: grade8/index
+      - file: grade9/index
+
+  - caption: 8 класс · Тепловые явления
+    chapters:
+      - file: grade8/lessons/01-mkt
+      - file: grade8/lessons/02-massa-i-razmery
+      - file: grade8/lessons/03-agregatnye-sostoyaniya
