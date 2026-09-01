@@ -48,5 +48,5 @@ html:
     и рабочей программе по физике 7–9 классов.</p>
 
 repository:
-  url: https://github.com/fuodorov/school-phys-book
+  url: https://github.com/phys-dev/school-phys-book
   branch: main

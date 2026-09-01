@@ -89,6 +89,9 @@ make rebuild
 
 ## Публикация
 
-Сайт собирается и публикуется на GitHub Pages автоматически при каждом push в `main`
-(см. `.github/workflows/deploy.yml`). В настройках репозитория нужно один раз выбрать
+Сайт собирается и публикуется автоматически при каждом push в `main`
+(см. `.github/workflows/deploy.yml`) и доступен по адресу
+<https://phys-dev.github.io/school-phys-book/>.
+
+Если публикация настраивается заново, в настройках репозитория нужно один раз выбрать
 **Settings → Pages → Source: GitHub Actions**.
