@@ -31,7 +31,7 @@ jobs:
           pip install -e .
 
       - name: Сборка книги
-        run: jupyter-book build . --warningiserror=false
+        run: jupyter-book build .
 
       - uses: actions/upload-pages-artifact@v3
         with:
