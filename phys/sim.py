@@ -1670,3 +1670,94 @@ def calorimeter():
              "и сравните. Затем добавьте потери — так выглядит настоящая лабораторная работа.",
         height=300,
     )
+
+
+_HEATING = """
+  // Кусок льда греют нагревателем постоянной мощности. Пока лёд твёрдый, температура
+  // растёт; при 0 °C она останавливается — вся энергия идёт на разрушение решётки;
+  // когда весь лёд растаял, температура воды снова растёт. Ползунки меняют массу
+  // и мощность, и видно, как от них зависят наклоны и длина «полки».
+  const W = cv.width, H = cv.height;
+  const C_ICE = 2100, C_WATER = 4200, LAMBDA = 3.4e5, T0 = -40, T_END = 100;
+  let time = 0, running_t = 0;
+  function params() { return { m: +el("m").value / 1000, P: +el("P").value }; }
+  function stages(p) {
+    const q1 = C_ICE * p.m * (0 - T0), q2 = LAMBDA * p.m, q3 = C_WATER * p.m * T_END;
+    return { t1: q1 / p.P, t2: q2 / p.P, t3: q3 / p.P, q1, q2, q3 };
+  }
+  function tempAt(p, s, tau) {
+    if (tau <= s.t1) return T0 + (0 - T0) * tau / s.t1;
+    if (tau <= s.t1 + s.t2) return 0;
+    if (tau <= s.t1 + s.t2 + s.t3) return T_END * (tau - s.t1 - s.t2) / s.t3;
+    return T_END;
+  }
+  function init() { time = 0; }
+  function step() { const p = params(), s = stages(p); const total = s.t1 + s.t2 + s.t3;
+    time += total / P.frames; if (time > total * 1.08) time = total * 1.08; }
+  function draw() {
+    const p = params(), s = stages(p), total = s.t1 + s.t2 + s.t3;
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, W, H);
+    const gx = 60, gy = 20, gw = W - 90, gh = H - 66;
+    const X = (tau) => gx + gw * tau / (total * 1.08), Y = (T) => gy + gh * (1 - (T - T0) / (T_END - T0));
+    ctx.strokeStyle = "#c9ced6"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx, gy + gh); ctx.lineTo(gx + gw, gy + gh); ctx.stroke();
+    ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(gx, Y(0)); ctx.lineTo(gx + gw, Y(0)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#5b6570"; ctx.font = "11px system-ui";
+    for (const T of [-40, -20, 0, 20, 40, 60, 80, 100]) ctx.fillText(T + "°", 24, Y(T) + 4);
+    ctx.fillText("время, мин", gx + gw - 60, gy + gh + 16);
+    for (let mn = 0; mn <= total * 1.08 / 60; mn += Math.max(1, Math.round(total / 60 / 8))) {
+      ctx.fillText(String(mn), X(mn * 60) - 4, gy + gh + 16);
+    }
+    // полный график бледно, пройденная часть — ярко
+    const drawTo = (upto, color, width) => {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
+      for (let i = 0; i <= 300; i++) { const tau = upto * i / 300; const T = tempAt(p, s, tau);
+        i ? ctx.lineTo(X(tau), Y(T)) : ctx.moveTo(X(tau), Y(T)); }
+      ctx.stroke();
+    };
+    drawTo(total * 1.08, "rgba(120,130,140,0.35)", 1.5);
+    drawTo(time, "#d1495b", 2.5);
+    const Tn = tempAt(p, s, time);
+    ctx.beginPath(); ctx.arc(X(time), Y(Tn), 5, 0, 7); ctx.fillStyle = "#d1495b"; ctx.fill();
+    // подписи участков
+    ctx.fillStyle = "#2f6690"; ctx.font = "12px system-ui";
+    ctx.fillText("лёд нагревается", X(s.t1 * 0.05), Y(-22));
+    ctx.fillText("лёд тает, t = 0 °C", X(s.t1 + s.t2 * 0.15), Y(0) - 8);
+    ctx.fillText("вода нагревается", X(s.t1 + s.t2 + s.t3 * 0.35), Y(55));
+    el("m-v").textContent = el("m").value + " г"; el("P-v").textContent = el("P").value + " Вт";
+    const faza = time <= s.t1 ? "лёд, " + Tn.toFixed(0) + " °C" : time <= s.t1 + s.t2
+      ? "лёд + вода при 0 °C, растаяло " + Math.min(100, 100 * (time - s.t1) / s.t2).toFixed(0) + " %"
+      : "вода, " + Tn.toFixed(0) + " °C";
+    out.textContent = "Сейчас: " + faza + "   ·   нагрев льда до 0 °C: " + (s.t1 / 60).toFixed(1)
+      + " мин (" + (s.q1 / 1000).toFixed(0) + " кДж)   ·   плавление: " + (s.t2 / 60).toFixed(1)
+      + " мин (" + (s.q2 / 1000).toFixed(0) + " кДж)   ·   нагрев воды до 100 °C: " + (s.t3 / 60).toFixed(1)
+      + " мин (" + (s.q3 / 1000).toFixed(0) + " кДж)";
+  }
+"""
+
+
+def heating_curve():
+    """График нагревания и плавления льда при постоянной мощности нагревателя.
+
+    Три участка: нагрев льда (c = 2100), плавление при 0 °C (λ = 3,4·10⁵ Дж/кг)
+    и нагрев воды (c = 4200). Длина «полки» пропорциональна массе и обратно
+    пропорциональна мощности; наклоны участков различаются вдвое из-за разных
+    теплоёмкостей льда и воды. Это график с рис. 31 учебника, но с ползунками.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("m", "Масса льда:", 50, 500, 200, 10)
+        + _slider("P", "Мощность нагревателя:", 100, 1000, 500, 50)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "График нагревания: от льда при −40 °C до воды при 100 °C",
+        _HEATING,
+        {"frames": 900},
+        controls,
+        hint="Следите за подписью внизу: на «полке» энергия поступает, а температура стоит — "
+             "она уходит на разрушение кристаллической решётки. Удвойте массу и посмотрите, "
+             "что станет с длиной полки.",
+        height=320,
+    )

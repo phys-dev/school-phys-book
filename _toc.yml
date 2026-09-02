@@ -31,6 +31,9 @@ parts:
       - file: grade8/lessons/14-lr-teploobmen
       - file: grade8/lessons/15-raschet-teploty
       - file: grade8/lessons/16-lr-teploemkost
+      - file: grade8/lessons/17-energiya-topliva
+      - file: grade8/lessons/18-plavlenie
+      - file: grade8/lessons/19-lr-plavlenie-lda
 
   - caption: 8 класс · Самостоятельные работы
     chapters:
@@ -39,3 +42,4 @@ parts:
       - file: grade8/samostoyatelnye/sr-03-smachivanie-rasshirenie
       - file: grade8/samostoyatelnye/sr-04-teplovye-protsessy
       - file: grade8/samostoyatelnye/sr-05-kolichestvo-teploty
+      - file: grade8/samostoyatelnye/sr-06-toplivo-i-plavlenie
