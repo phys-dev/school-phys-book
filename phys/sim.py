@@ -1678,24 +1678,25 @@ _HEATING = """
   // когда весь лёд растаял, температура воды снова растёт. Ползунки меняют массу
   // и мощность, и видно, как от них зависят наклоны и длина «полки».
   const W = cv.width, H = cv.height;
-  const C_ICE = 2100, C_WATER = 4200, LAMBDA = 3.4e5, T0 = -40, T_END = 100;
+  const C_ICE = 2100, C_WATER = 4200, LAMBDA = 3.4e5, L_VAPOR = 2.3e6, T0 = -40, T_END = 100;
   let time = 0, running_t = 0;
   function params() { return { m: +el("m").value / 1000, P: +el("P").value }; }
   function stages(p) {
     const q1 = C_ICE * p.m * (0 - T0), q2 = LAMBDA * p.m, q3 = C_WATER * p.m * T_END;
-    return { t1: q1 / p.P, t2: q2 / p.P, t3: q3 / p.P, q1, q2, q3 };
+    const q4 = P.boil ? L_VAPOR * p.m : 0;
+    return { t1: q1 / p.P, t2: q2 / p.P, t3: q3 / p.P, t4: q4 / p.P, q1, q2, q3, q4 };
   }
   function tempAt(p, s, tau) {
     if (tau <= s.t1) return T0 + (0 - T0) * tau / s.t1;
     if (tau <= s.t1 + s.t2) return 0;
     if (tau <= s.t1 + s.t2 + s.t3) return T_END * (tau - s.t1 - s.t2) / s.t3;
-    return T_END;
+    return T_END;                                  // кипение: температура стоит на 100 °C
   }
   function init() { time = 0; }
-  function step() { const p = params(), s = stages(p); const total = s.t1 + s.t2 + s.t3;
+  function step() { const p = params(), s = stages(p); const total = s.t1 + s.t2 + s.t3 + s.t4;
     time += total / P.frames; if (time > total * 1.08) time = total * 1.08; }
   function draw() {
-    const p = params(), s = stages(p), total = s.t1 + s.t2 + s.t3;
+    const p = params(), s = stages(p), total = s.t1 + s.t2 + s.t3 + s.t4;
     ctx.clearRect(0, 0, W, H); ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, W, H);
     const gx = 60, gy = 20, gw = W - 90, gh = H - 66;
     const X = (tau) => gx + gw * tau / (total * 1.08), Y = (T) => gy + gh * (1 - (T - T0) / (T_END - T0));
@@ -1724,19 +1725,23 @@ _HEATING = """
     ctx.fillText("лёд нагревается", X(s.t1 * 0.05), Y(-22));
     ctx.fillText("лёд тает, t = 0 °C", X(s.t1 + s.t2 * 0.15), Y(0) - 8);
     ctx.fillText("вода нагревается", X(s.t1 + s.t2 + s.t3 * 0.35), Y(55));
+    if (P.boil) ctx.fillText("вода кипит, t = 100 °C", X(s.t1 + s.t2 + s.t3 + s.t4 * 0.2), Y(100) - 8);
     el("m-v").textContent = el("m").value + " г"; el("P-v").textContent = el("P").value + " Вт";
+    const t123 = s.t1 + s.t2 + s.t3;
     const faza = time <= s.t1 ? "лёд, " + Tn.toFixed(0) + " °C" : time <= s.t1 + s.t2
       ? "лёд + вода при 0 °C, растаяло " + Math.min(100, 100 * (time - s.t1) / s.t2).toFixed(0) + " %"
-      : "вода, " + Tn.toFixed(0) + " °C";
+      : time <= t123 || !P.boil ? "вода, " + Tn.toFixed(0) + " °C"
+      : "вода кипит при 100 °C, испарилось " + Math.min(100, 100 * (time - t123) / s.t4).toFixed(0) + " %";
     out.textContent = "Сейчас: " + faza + "   ·   нагрев льда до 0 °C: " + (s.t1 / 60).toFixed(1)
       + " мин (" + (s.q1 / 1000).toFixed(0) + " кДж)   ·   плавление: " + (s.t2 / 60).toFixed(1)
       + " мин (" + (s.q2 / 1000).toFixed(0) + " кДж)   ·   нагрев воды до 100 °C: " + (s.t3 / 60).toFixed(1)
-      + " мин (" + (s.q3 / 1000).toFixed(0) + " кДж)";
+      + " мин (" + (s.q3 / 1000).toFixed(0) + " кДж)"
+      + (P.boil ? "   ·   кипение: " + (s.t4 / 60).toFixed(1) + " мин (" + (s.q4 / 1000).toFixed(0) + " кДж)" : "");
   }
 """
 
 
-def heating_curve():
+def heating_curve(boil=False):
     """График нагревания и плавления льда при постоянной мощности нагревателя.
 
     Три участка: нагрев льда (c = 2100), плавление при 0 °C (λ = 3,4·10⁵ Дж/кг)
@@ -1752,12 +1757,138 @@ def heating_curve():
         + "</div>"
     )
     return _build(
-        "График нагревания: от льда при −40 °C до воды при 100 °C",
+        "График нагревания: от льда при −40 °C до " + ("полного выкипания воды" if boil else "воды при 100 °C"),
         _HEATING,
-        {"frames": 900},
+        {"frames": 900 if not boil else 1500, "boil": boil},
         controls,
         hint="Следите за подписью внизу: на «полке» энергия поступает, а температура стоит — "
              "она уходит на разрушение кристаллической решётки. Удвойте массу и посмотрите, "
              "что станет с длиной полки.",
         height=320,
+    )
+
+
+_EVAPORATION = """
+  // Капля жидкости на дне сосуда. Молекулы притягиваются (Леннард-Джонс), и вырваться
+  // с поверхности могут только самые быстрые. Уходя, они уносят избыток энергии —
+  // жидкость остывает. Если пар над каплей всё время убирать («ветер»), испарение идёт
+  // без остановки; если пар копится, молекулы возвращаются — наступает динамическое
+  // равновесие, а число молекул пара перестаёт расти.
+  const SIG = P.sigma, EPS = P.eps, RC = 2.5 * SIG, RC2 = RC * RC, DT = P.dt, SUB = P.sub, N = P.n;
+  const SURF = cv.height * P.surf;               // условная граница «жидкость — пар»
+  let p = [], ke0 = 1, ushlo = 0, frame = 0, key = "";
+  function wind() { return +el("wind").value / 100; }
+  function tstart() { return +el("T").value / 100; }
+  function init() {
+    p = []; ushlo = 0; frame = 0; key = el("T").value;
+    const cols = Math.ceil(Math.sqrt(N * 2.2)), rows = Math.ceil(N / cols), step = 1.12 * SIG;
+    const x0 = (cv.width - cols * step) / 2, y0 = cv.height - 12 - rows * step * 0.87;
+    const v = Math.sqrt(2 * tstart());
+    for (let i = 0; i < N; i++) {
+      const r = Math.floor(i / cols), c = i % cols, a = Math.random() * 2 * Math.PI;
+      p.push({ x: x0 + c * step + (r % 2) * step / 2, y: y0 + r * step * 0.87,
+               vx: v * Math.cos(a) * (0.6 + 0.8 * Math.random()), vy: v * Math.sin(a) * (0.6 + 0.8 * Math.random()),
+               fx: 0, fy: 0 });
+    }
+    forces();
+    // прогрев капли до заданной температуры, чтобы опыт начинался с жидкости, а не с решётки
+    for (let k = 0; k < P.warm; k++) {
+      for (const q of p) { q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT; q.x += q.vx * DT; q.y += q.vy * DT; }
+      forces();
+      let s = 0;
+      for (const q of p) { q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT;
+        if (q.y > cv.height - 5) { q.y = cv.height - 5; q.vy = -Math.abs(q.vy); }
+        s += 0.5 * (q.vx * q.vx + q.vy * q.vy); }
+      const kk = Math.sqrt(tstart() / Math.max(s / p.length, 1e-6));
+      for (const q of p) { q.vx *= kk; q.vy *= kk; }
+    }
+    ke0 = liquidKE() || 1;
+  }
+  function forces() {
+    for (const q of p) { q.fx = 0; q.fy = P.g; }
+    for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) {
+      const dx = p[j].x - p[i].x, dy = p[j].y - p[i].y, r2 = dx * dx + dy * dy;
+      if (r2 > RC2 || r2 === 0) continue;
+      const s2 = SIG * SIG / r2, s6 = s2 * s2 * s2;
+      let f = 24 * EPS * (2 * s6 * s6 - s6) / r2; f = Math.max(-P.fmax, Math.min(P.fmax, f));
+      p[i].fx -= f * dx; p[i].fy -= f * dy; p[j].fx += f * dx; p[j].fy += f * dy;
+    }
+  }
+  function isLiquid(q) { return q.y > SURF; }
+  function liquidKE() {
+    let s = 0, n = 0;
+    for (const q of p) if (isLiquid(q)) { s += 0.5 * (q.vx * q.vx + q.vy * q.vy); n++; }
+    return n ? s / n : 0;
+  }
+  function step() {
+    if (el("T").value !== key) { init(); return; }       // сменили начальную температуру — заново
+    frame++;
+    for (let s = 0; s < SUB; s++) {
+      for (const q of p) { q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT; q.x += q.vx * DT; q.y += q.vy * DT; }
+      forces();
+      for (const q of p) {
+        q.vx += 0.5 * q.fx * DT; q.vy += 0.5 * q.fy * DT;
+        if (q.x < 5) { q.x = 5; q.vx = Math.abs(q.vx); }
+        if (q.x > cv.width - 5) { q.x = cv.width - 5; q.vx = -Math.abs(q.vx); }
+        if (q.y > cv.height - 5) { q.y = cv.height - 5; q.vy = -Math.abs(q.vy); }
+        if (q.y < 5) { q.y = 5; q.vy = Math.abs(q.vy); }
+      }
+    }
+    // ветер: каждую молекулу пара в верхней части сосуда уносит с заданной вероятностью
+    if (wind() > 0) {
+      const keep = [];
+      for (const q of p) {
+        if (q.y < SURF * 0.6 && Math.random() < wind() * P.windRate) ushlo++; else keep.push(q);
+      }
+      p = keep;
+    }
+  }
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.strokeStyle = "#c9ced6"; ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(0, SURF); ctx.lineTo(cv.width, SURF); ctx.stroke(); ctx.setLineDash([]);
+    for (const q of p) {
+      ctx.fillStyle = isLiquid(q) ? "#3a8fb7" : "#d1495b";
+      ctx.beginPath(); ctx.arc(q.x, q.y, SIG * 0.4, 0, 7); ctx.fill();
+    }
+    const nl = p.filter(isLiquid).length, nv = p.length - nl;
+    el("wind-v").textContent = el("wind").value + " %"; el("T-v").textContent = el("T").value;
+    ctx.fillStyle = "#5b6570"; ctx.font = "12px system-ui";
+    ctx.fillText("молекул пара: " + nv, 12, 20);
+    ctx.fillText("унесено ветром: " + ushlo, 12, 38);
+    const ke = liquidKE() / ke0;
+    out.textContent = "В жидкости " + nl + " молекул   ·   средняя кинетическая энергия молекул жидкости: "
+      + ke.toFixed(2) + " от начальной"
+      + (wind() > 0 ? "   ·   быстрые уходят безвозвратно — жидкость остывает"
+                    : "   ·   пар копится и частично возвращается — динамическое равновесие");
+  }
+"""
+
+
+def evaporation(n=110):
+    """Испарение на уровне молекул: с поверхности жидкости уходят самые быстрые.
+
+    Молекулы капли притягиваются друг к другу; вырваться наверх могут лишь те, чья
+    скорость заметно выше средней. Улетая, они забирают избыток энергии, и средняя
+    кинетическая энергия оставшихся молекул падает — жидкость остывает при испарении
+    (§ 19). Ползунок «ветер» уносит пар из сосуда: испарение ускоряется. Без ветра пар
+    копится, молекулы возвращаются — устанавливается динамическое равновесие (§ 18).
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("wind", "Ветер (уносит пар):", 0, 100, 0, 5)
+        + _slider("T", "Начальная температура (усл.):", 50, 95, 75, 1)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "Испарение: почему жидкость остывает",
+        _EVAPORATION,
+        {"n": n, "sigma": 13.0, "eps": 1.0, "dt": 0.06, "sub": 3, "fmax": 6.0, "g": 0.004,
+         "surf": 0.55, "windRate": 0.2, "warm": 250},
+        controls,
+        hint="Без ветра пар над каплей копится и часть молекул возвращается. Включите ветер — "
+             "пар уносится, испарение не останавливается, а жидкость заметно остывает.",
+        height=300,
     )

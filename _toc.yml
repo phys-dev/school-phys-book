@@ -34,6 +34,10 @@ parts:
       - file: grade8/lessons/17-energiya-topliva
       - file: grade8/lessons/18-plavlenie
       - file: grade8/lessons/19-lr-plavlenie-lda
+      - file: grade8/lessons/20-isparenie
+      - file: grade8/lessons/21-kipenie
+      - file: grade8/lessons/22-vlazhnost-lr
+      - file: grade8/lessons/23-zadachi-vlazhnost
 
   - caption: 8 класс · Самостоятельные работы
     chapters:
@@ -43,3 +47,4 @@ parts:
       - file: grade8/samostoyatelnye/sr-04-teplovye-protsessy
       - file: grade8/samostoyatelnye/sr-05-kolichestvo-teploty
       - file: grade8/samostoyatelnye/sr-06-toplivo-i-plavlenie
+      - file: grade8/samostoyatelnye/sr-07-isparenie-kipenie-vlazhnost
