@@ -1892,3 +1892,99 @@ def evaporation(n=110):
              "пар уносится, испарение не останавливается, а жидкость заметно остывает.",
         height=300,
     )
+
+
+_ENGINE = """
+  // Схема четырёхтактного двигателя внутреннего сгорания: впуск, сжатие, рабочий ход,
+  // выпуск. Справа — куда уходит энергия топлива: полезная работа и потери.
+  const W = cv.width, H = cv.height;
+  const CX = 180, TOP = 40, BOT = 230, CW = 110;        // цилиндр
+  let theta = 0, molecules = [];
+  function eta() { return +el("eta").value / 100; }
+  function fuel() { return +el("fuel").value; }         // мг топлива за цикл
+  function pistonY() { return TOP + 30 + (BOT - TOP - 60) * (1 - Math.cos(theta)) / 2; }
+  function stroke() { return Math.floor((theta / Math.PI) % 4); }
+  function init() {
+    theta = 0; molecules = [];
+    for (let i = 0; i < 60; i++) molecules.push({ u: Math.random(), v: Math.random(), a: Math.random() * 6.28 });
+  }
+  function step() { theta += P.speed; if (theta > 8 * Math.PI) theta -= 8 * Math.PI; }
+  function draw() {
+    ctx.clearRect(0, 0, W, H); ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, W, H);
+    const s = stroke(), py = pistonY();
+    const names = ["1-й такт: впуск", "2-й такт: сжатие", "3-й такт: рабочий ход", "4-й такт: выпуск"];
+    // цилиндр и поршень
+    ctx.strokeStyle = "#5b6570"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(CX - CW / 2, TOP); ctx.lineTo(CX - CW / 2, BOT); ctx.moveTo(CX + CW / 2, TOP); ctx.lineTo(CX + CW / 2, BOT); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(CX - CW / 2, TOP); ctx.lineTo(CX - 28, TOP); ctx.moveTo(CX - 12, TOP); ctx.lineTo(CX + 12, TOP); ctx.moveTo(CX + 28, TOP); ctx.lineTo(CX + CW / 2, TOP); ctx.stroke();
+    // клапаны: впускной открыт на 1-м такте, выпускной — на 4-м
+    const drawValve = (x, open, color) => { ctx.fillStyle = color; ctx.fillRect(x - 8, TOP - 6 + (open ? 10 : 0), 16, 6); };
+    drawValve(CX - 20, s === 0, "#3a8fb7"); drawValve(CX + 20, s === 3, "#8a94a0");
+    // свеча
+    ctx.fillStyle = s === 2 && theta % Math.PI < 0.35 ? "#f2b134" : "#5b6570";
+    ctx.beginPath(); ctx.arc(CX, TOP - 10, s === 2 && theta % Math.PI < 0.35 ? 9 : 4, 0, 7); ctx.fill();
+    // молекулы газа между головкой и поршнем
+    const hot = s === 2, dens = s === 1 || s === 2;
+    for (const m of molecules) {
+      const x = CX - CW / 2 + 8 + m.u * (CW - 16), y = TOP + 6 + m.v * Math.max(4, py - TOP - 12);
+      if (s === 0 && m.v > (theta % Math.PI) / Math.PI) continue;          // на впуске газ ещё входит
+      if (s === 3 && m.v < (theta % Math.PI) / Math.PI) continue;          // на выпуске газ выходит
+      ctx.fillStyle = hot ? "#d1495b" : (s === 3 ? "#8a94a0" : "#3a8fb7");
+      ctx.beginPath(); ctx.arc(x, y, dens ? 3.6 : 3, 0, 7); ctx.fill();
+    }
+    ctx.fillStyle = "#8a94a0"; ctx.fillRect(CX - CW / 2 + 2, py, CW - 4, 14);
+    // шатун и коленчатый вал
+    const crankY = BOT + 45, r = (BOT - TOP - 60) / 4;
+    const kx = CX + r * Math.sin(theta), ky = crankY - r * Math.cos(theta);
+    ctx.strokeStyle = "#5b6570"; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(CX, py + 14); ctx.lineTo(kx, ky); ctx.stroke();
+    ctx.beginPath(); ctx.arc(CX, crankY, r, 0, 7); ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(kx, ky, 6, 0, 7); ctx.fillStyle = "#5b6570"; ctx.fill();
+    ctx.fillStyle = "#2f6690"; ctx.font = "600 14px system-ui"; ctx.fillText(names[s], 30, H - 12);
+    // энергия за цикл
+    const Q1 = fuel() * 1e-6 * P.q, A = eta() * Q1, Q2 = Q1 - A;
+    const bx = 330, by = 40, bw = W - bx - 30, bh = 26;
+    ctx.fillStyle = "#5b6570"; ctx.font = "13px system-ui";
+    ctx.fillText("Энергия сгоревшего топлива за цикл: " + Q1.toFixed(0) + " Дж", bx, by - 10);
+    ctx.fillStyle = "#2a9d5c"; ctx.fillRect(bx, by, bw * eta(), bh);
+    ctx.fillStyle = "#d1495b"; ctx.fillRect(bx + bw * eta(), by, bw * (1 - eta()), bh);
+    ctx.fillStyle = "#1f2d3a"; ctx.font = "12px system-ui";
+    ctx.fillText("полезная работа A = " + A.toFixed(0) + " Дж (" + (eta() * 100).toFixed(0) + " %)", bx, by + bh + 18);
+    ctx.fillText("отдано в выхлоп и охлаждение Q₂ = " + Q2.toFixed(0) + " Дж (" + ((1 - eta()) * 100).toFixed(0) + " %)", bx, by + bh + 36);
+    ctx.fillStyle = "#5b6570";
+    ctx.fillText("КПД = A / Q₁ · 100 %  — доля энергии топлива, ставшая работой", bx, by + bh + 62);
+    ctx.fillText("Один рабочий цикл — четыре хода поршня и два оборота вала.", bx, by + bh + 90);
+    ctx.fillText("Работу совершает только третий такт; остальные три идут за счёт", bx, by + bh + 108);
+    ctx.fillText("инерции маховика или других цилиндров.", bx, by + bh + 126);
+    el("eta-v").textContent = el("eta").value + " %"; el("fuel-v").textContent = el("fuel").value + " мг";
+    out.textContent = names[s] + "   ·   КПД " + el("eta").value + " %: из " + Q1.toFixed(0) + " Дж топлива в работу переходит "
+      + A.toFixed(0) + " Дж, остальное уносят выхлопные газы и система охлаждения";
+  }
+"""
+
+
+def engine():
+    """Четырёхтактный двигатель внутреннего сгорания и его КПД.
+
+    Слева — схема цилиндра с поршнем, клапанами и свечой: такты сменяют друг друга,
+    газ входит, сжимается, вспыхивает и толкает поршень, выходит. Справа — энергия
+    сгоревшего за цикл топлива и её деление на полезную работу и потери. Ползунок
+    КПД задаёт долю; типичные значения из § 26 учебника: бензиновый двигатель 20–25 %,
+    дизель 35 %, турбоагрегаты электростанций 40–50 %.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("eta", "КПД двигателя:", 10, 50, 25, 1)
+        + _slider("fuel", "Топливо за цикл:", 5, 40, 20, 1)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "Четыре такта двигателя внутреннего сгорания",
+        _ENGINE,
+        {"speed": 0.035, "q": 4.6e7},
+        controls,
+        hint="Следите за клапанами и свечой: впускной открыт только на первом такте, "
+             "выпускной — на четвёртом, искра проскакивает в начале третьего.",
+        height=300,
+    )

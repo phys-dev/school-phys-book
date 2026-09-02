@@ -38,6 +38,11 @@ parts:
       - file: grade8/lessons/21-kipenie
       - file: grade8/lessons/22-vlazhnost-lr
       - file: grade8/lessons/23-zadachi-vlazhnost
+      - file: grade8/lessons/24-teplovye-dvigateli
+      - file: grade8/lessons/25-kpd
+      - file: grade8/lessons/26-zakon-sohraneniya
+      - file: grade8/lessons/27-podgotovka-kr
+      - file: grade8/lessons/28-kontrolnaya
 
   - caption: 8 класс · Самостоятельные работы
     chapters:
