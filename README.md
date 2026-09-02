@@ -38,6 +38,7 @@ _config.yml           настройки сборки
 grade7/  grade8/  grade9/
     index.md          обзор курса класса: все уроки по программе
     lessons/*.ipynb   сами уроки
+    samostoyatelnye/  короткие проверочные работы с ответами для учителя
 phys/                 общий код для всех классов
 _static/custom.css    оформление блоков с опытами
 _mathjax/             MathJax для работы без интернета

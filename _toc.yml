@@ -19,3 +19,9 @@ parts:
       - file: grade8/lessons/05-kristally-i-amorfnye
       - file: grade8/lessons/06-smachivanie-i-kapillyary
       - file: grade8/lessons/07-teplovoe-rasshirenie
+
+  - caption: 8 класс · Самостоятельные работы
+    chapters:
+      - file: grade8/samostoyatelnye/sr-01-stroenie-veshchestva
+      - file: grade8/samostoyatelnye/sr-02-agregatnye-sostoyaniya
+      - file: grade8/samostoyatelnye/sr-03-smachivanie-rasshirenie
