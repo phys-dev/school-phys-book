@@ -26,6 +26,11 @@ parts:
       - file: grade8/lessons/09-vnutrennyaya-energiya
       - file: grade8/lessons/10-vidy-teploperedachi
       - file: grade8/lessons/11-konferentsiya
+      - file: grade8/lessons/12-kolichestvo-teploty
+      - file: grade8/lessons/13-teplovoy-balans
+      - file: grade8/lessons/14-lr-teploobmen
+      - file: grade8/lessons/15-raschet-teploty
+      - file: grade8/lessons/16-lr-teploemkost
 
   - caption: 8 класс · Самостоятельные работы
     chapters:
@@ -33,3 +38,4 @@ parts:
       - file: grade8/samostoyatelnye/sr-02-agregatnye-sostoyaniya
       - file: grade8/samostoyatelnye/sr-03-smachivanie-rasshirenie
       - file: grade8/samostoyatelnye/sr-04-teplovye-protsessy
+      - file: grade8/samostoyatelnye/sr-05-kolichestvo-teploty

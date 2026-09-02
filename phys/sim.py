@@ -1569,3 +1569,104 @@ def conduction(cols=44, rows=5):
              "в нижнем — он станет «металлом».",
         height=230,
     )
+
+
+_CALORIMETER = """
+  // Нагретый металлический цилиндр опускают в воду. Энергия переходит от горячего тела
+  // к холодному тем быстрее, чем больше разность температур; температуры сходятся
+  // к общему значению. Его заранее даёт уравнение теплового баланса — модель это проверяет.
+  const W = cv.width, H = cv.height;
+  const MATERIALS = [[140, "свинец"], [230, "олово"], [250, "серебро"], [400, "медь"],
+                     [460, "железо"], [500, "сталь"], [920, "алюминий"]];
+  let t1 = 0, t2 = 0, time = 0, hist = [], key = "";
+  function params() {
+    return { m1: +el("m1").value / 1000, c1: +el("c1").value, T1: +el("T1").value,
+             m2: +el("m2").value / 1000, c2: 4200, T2: 20, loss: +el("loss").value / 100 };
+  }
+  function balance(p) { return (p.c1 * p.m1 * p.T1 + p.c2 * p.m2 * p.T2) / (p.c1 * p.m1 + p.c2 * p.m2); }
+  function material(c) {
+    let best = MATERIALS[0];
+    for (const m of MATERIALS) if (Math.abs(m[0] - c) < Math.abs(best[0] - c)) best = m;
+    return Math.abs(best[0] - c) <= 25 ? best[1] : "";
+  }
+  function init() {
+    const p = params(); key = JSON.stringify(p);
+    t1 = p.T1; t2 = p.T2; time = 0; hist = [[0, t1, t2]];
+  }
+  function step() {
+    const p = params();
+    if (JSON.stringify(p) !== key) { init(); return; }      // сдвинули ползунок — опыт с начала
+    for (let s = 0; s < P.sub; s++) {
+      const q = P.k * (t1 - t2) * P.dt;                     // теплообмен металл → вода
+      t1 -= q / (p.c1 * p.m1);
+      t2 += q / (p.c2 * p.m2);
+      const ql = p.loss * P.kl * (t2 - p.T2) * P.dt;        // потери в комнату
+      t2 -= ql / (p.c2 * p.m2);
+      time += P.dt;
+    }
+    if (time - hist[hist.length - 1][0] >= P.every) hist.push([time, t1, t2]);
+    if (hist.length > 600) hist.shift();
+  }
+  function draw() {
+    const p = params(), tb = balance(p);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, W, H);
+    const gx = 56, gy = 22, gw = W - 80, gh = H - 64;
+    const Tmax = Math.max(100, p.T1 + 5), tmax = Math.max(60, hist[hist.length - 1][0] + 1);
+    const X = (t) => gx + gw * t / tmax, Y = (T) => gy + gh * (1 - T / Tmax);
+    ctx.strokeStyle = "#c9ced6"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx, gy + gh); ctx.lineTo(gx + gw, gy + gh); ctx.stroke();
+    ctx.fillStyle = "#5b6570"; ctx.font = "11px system-ui";
+    for (let T = 0; T <= Tmax; T += 20) { ctx.fillText(T + "°", 22, Y(T) + 4);
+      ctx.beginPath(); ctx.moveTo(gx - 3, Y(T)); ctx.lineTo(gx, Y(T)); ctx.stroke(); }
+    ctx.fillText("время, с", gx + gw - 52, gy + gh + 16);
+    // расчётная температура равновесия — пунктиром
+    ctx.strokeStyle = "#2a9d5c"; ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(gx, Y(tb)); ctx.lineTo(gx + gw, Y(tb)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#2a9d5c"; ctx.fillText("по уравнению баланса: " + tb.toFixed(1) + " °C", gx + 8, Y(tb) - 6);
+    for (const [idx, color, label] of [[1, "#d1495b", "металл"], [2, "#2f6690", "вода"]]) {
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+      hist.forEach((h, i) => { i ? ctx.lineTo(X(h[0]), Y(h[idx])) : ctx.moveTo(X(h[0]), Y(h[idx])); });
+      ctx.stroke();
+      ctx.fillStyle = color; ctx.fillText(label, X(hist[hist.length - 1][0]) + 6, Y(hist[hist.length - 1][idx]) + 4);
+    }
+    const mat = material(p.c1);
+    el("m1-v").textContent = el("m1").value + " г"; el("m2-v").textContent = el("m2").value + " г";
+    el("T1-v").textContent = el("T1").value + " °C"; el("loss-v").textContent = el("loss").value + " %";
+    el("c1-v").textContent = el("c1").value + " Дж/(кг·°C)" + (mat ? " — " + mat : "");
+    const gap = Math.abs(t1 - t2);
+    out.textContent = "Сейчас: металл " + t1.toFixed(1) + " °C, вода " + t2.toFixed(1) + " °C"
+      + (gap < 0.3 ? "   ·   равновесие: " + t2.toFixed(1) + " °C" + (p.loss > 0 ? " — ниже расчётного из-за потерь" : " — как и предсказывает уравнение")
+                   : "   ·   теплообмен идёт, разность " + gap.toFixed(1) + " °C");
+  }
+"""
+
+
+def calorimeter():
+    """Калориметр: нагретый металл в воде, температуры сходятся к общей.
+
+    Скорость передачи энергии пропорциональна разности температур, поэтому кривые
+    сближаются сначала быстро, потом всё медленнее. Пунктир — температура, которую
+    заранее даёт уравнение теплового баланса; модель с ним сходится. Ползунок потерь
+    показывает, почему в реальной лабораторной результат выходит чуть ниже расчёта.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("c1", "Теплоёмкость металла:", 140, 920, 400, 10)
+        + _slider("m1", "Масса металла:", 50, 500, 200, 10)
+        + _slider("T1", "Его температура:", 40, 100, 90, 1)
+        + "</div><div class=\"ps-row\">"
+        + _slider("m2", "Масса воды (20 °C):", 100, 500, 200, 10)
+        + _slider("loss", "Потери в комнату:", 0, 100, 0, 5)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "Калориметр: металл в воде",
+        _CALORIMETER,
+        {"k": 8.0, "kl": 1.5, "dt": 0.02, "sub": 4, "every": 0.25},
+        controls,
+        hint="Сначала предскажите температуру по уравнению баланса, потом запустите модель "
+             "и сравните. Затем добавьте потери — так выглядит настоящая лабораторная работа.",
+        height=300,
+    )
