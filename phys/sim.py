@@ -1197,3 +1197,375 @@ def thermal_expansion(temperature=30):
              "среднее расстояние растёт, а тело расширяется.",
         height=340,
     )
+
+
+_CONTACT = """
+  // Два газа в одном сосуде разделены стенкой из атомов твёрдого тела. Атомы стенки
+  // привязаны к своим местам пружинами, но колеблются и передают энергию от молекул
+  // слева молекулам справа. Никакого термостата нет: система замкнута.
+  const W = cv.width, BOX_H = P.boxH, GR_H = cv.height - P.boxH;
+  const rg = P.rg, rw = P.rw, mid = W / 2;
+  let gas = [], wall = [], hist = [], frame = 0, ke0 = 1;
+  function make(n, x0, x1, v) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 2 * Math.PI, s = v * (0.7 + 0.6 * Math.random());
+      gas.push({ x: x0 + Math.random() * (x1 - x0), y: rg + Math.random() * (BOX_H - 2 * rg),
+                 vx: s * Math.cos(a), vy: s * Math.sin(a) });
+    }
+  }
+  function init() {
+    gas = []; wall = []; hist = []; frame = 0;
+    make(P.n, rg + 2, mid - rw - rg - 2, P.vHot);
+    make(P.n, mid + rw + rg + 2, W - rg - 2, P.vCold);
+    const nW = Math.ceil(BOX_H / P.wallStep);
+    for (let i = 0; i < nW; i++) {
+      const y = P.wallStep / 2 + i * P.wallStep;
+      wall.push({ x: mid, y: y, hx: mid, hy: y, vx: 0, vy: 0 });
+    }
+    ke0 = sideKE(true);
+    E0 = totalE();
+  }
+  function collide(p, q, r1, r2, m1, m2) {
+    const dx = q.x - p.x, dy = q.y - p.y, d2 = dx * dx + dy * dy, R = r1 + r2;
+    if (d2 >= R * R || d2 === 0) return;
+    const d = Math.sqrt(d2), nx = dx / d, ny = dy / d;
+    const vn = (p.vx - q.vx) * nx + (p.vy - q.vy) * ny;   // > 0 — сближаются
+    if (vn <= 0) return;
+    const J = 2 * vn / (1 / m1 + 1 / m2);                  // упругий удар разных масс
+    p.vx -= J / m1 * nx; p.vy -= J / m1 * ny;
+    q.vx += J / m2 * nx; q.vy += J / m2 * ny;
+    const push = (R - d) / 2 + P.eps;
+    p.x -= nx * push * m2 / (m1 + m2) * 2; p.y -= ny * push * m2 / (m1 + m2) * 2;
+    q.x += nx * push * m1 / (m1 + m2) * 2; q.y += ny * push * m1 / (m1 + m2) * 2;
+  }
+  let E0 = 1;
+  function totalE() {
+    let e = 0;
+    for (const p of gas) e += 0.5 * (p.vx * p.vx + p.vy * p.vy);
+    for (const w of wall) e += 0.5 * P.mw * (w.vx * w.vx + w.vy * w.vy)
+                             + 0.5 * P.mw * P.kt * ((w.x - w.hx) ** 2 + (w.y - w.hy) ** 2);
+    return e;
+  }
+  function conserve() {
+    // система замкнута: численная погрешность не должна менять полную энергию
+    let pe = 0;
+    for (const w of wall) pe += 0.5 * P.mw * P.kt * ((w.x - w.hx) ** 2 + (w.y - w.hy) ** 2);
+    const keNow = totalE() - pe, keWant = E0 - pe;
+    if (keNow > 0 && keWant > 0) {
+      const k = Math.sqrt(keWant / keNow);
+      for (const p of gas) { p.vx *= k; p.vy *= k; }
+      for (const w of wall) { w.vx *= k; w.vy *= k; }
+    }
+  }
+  function sideKE(left) {
+    let s = 0, n = 0;
+    for (const p of gas) if ((p.x < mid) === left) { s += 0.5 * (p.vx * p.vx + p.vy * p.vy); n++; }
+    return n ? s / n : 0;
+  }
+  function step() {
+    frame++;
+    for (let s = 0; s < P.sub; s++) substep();
+    conserve();
+    if (frame % 4 === 0) {
+      hist.push([sideKE(true) / ke0, sideKE(false) / ke0]);
+      if (hist.length > 240) hist.shift();
+    }
+  }
+  function substep() {
+    for (const p of gas) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < rg) { p.x = rg; p.vx = Math.abs(p.vx); }
+      if (p.x > W - rg) { p.x = W - rg; p.vx = -Math.abs(p.vx); }
+      if (p.y < rg) { p.y = rg; p.vy = Math.abs(p.vy); }
+      if (p.y > BOX_H - rg) { p.y = BOX_H - rg; p.vy = -Math.abs(p.vy); }
+      // страховка: сквозь стенку молекулы не проходят
+      if (p.x > mid - rg && p.x < mid) { p.x = mid - rg; p.vx = -Math.abs(p.vx); }
+      if (p.x < mid + rg && p.x >= mid) { p.x = mid + rg; p.vx = Math.abs(p.vx); }
+    }
+    for (const w of wall) {                    // атомы стенки на пружинах
+      w.vx += -P.kt * (w.x - w.hx); w.vy += -P.kt * (w.y - w.hy);
+      w.x += w.vx; w.y += w.vy;
+    }
+    for (let i = 0; i < gas.length; i++) {
+      for (let j = i + 1; j < gas.length; j++) collide(gas[i], gas[j], rg, rg, 1, 1);
+      for (const w of wall) collide(gas[i], w, rg, rw, 1, P.mw);
+    }
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, W, BOX_H);
+    for (const w of wall) { ctx.beginPath(); ctx.arc(w.x, w.y, rw, 0, 7); ctx.fillStyle = "#5b6570"; ctx.fill(); }
+    for (const p of gas) {
+      const s = Math.hypot(p.vx, p.vy) / P.vHot;                   // цвет по скорости
+      const t = Math.max(0, Math.min(1, s));
+      ctx.fillStyle = "rgb(" + Math.round(60 + 170 * t) + "," + Math.round(120 - 60 * t) + "," + Math.round(200 - 150 * t) + ")";
+      ctx.beginPath(); ctx.arc(p.x, p.y, rg, 0, 7); ctx.fill();
+    }
+    const y0 = BOX_H + 8, h = GR_H - 22;
+    ctx.strokeStyle = "#c9ced6"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(34, y0); ctx.lineTo(W - 6, y0); ctx.moveTo(34, y0 + h); ctx.lineTo(W - 6, y0 + h); ctx.stroke();
+    ctx.fillStyle = "#5b6570"; ctx.font = "11px system-ui";
+    ctx.fillText("T", 12, y0 + 10); ctx.fillText("время →", W - 60, y0 + h + 14);
+    const colors = ["#d1495b", "#2f6690"];
+    for (let k = 0; k < 2; k++) {
+      ctx.strokeStyle = colors[k]; ctx.lineWidth = 1.8; ctx.beginPath();
+      hist.forEach((v, i) => {
+        const X = 34 + i / 240 * (W - 40), Y = y0 + h * (1 - Math.min(1, v[k] / 1.05));
+        i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+      });
+      ctx.stroke();
+    }
+    const L = sideKE(true) / ke0, R = sideKE(false) / ke0;
+    ctx.fillStyle = "#d1495b"; ctx.fillText("горячий газ", 40, y0 + 12);
+    ctx.fillStyle = "#2f6690"; ctx.fillText("холодный газ", 40, y0 + 24);
+    out.textContent = "Средняя кинетическая энергия молекул (усл. ед.):  слева " + L.toFixed(2)
+      + "   ·   справа " + R.toFixed(2)
+      + (Math.abs(L - R) < 0.12 ? "   ·   тепловое равновесие установилось" : "   ·   энергия переходит через стенку");
+  }
+"""
+
+
+def thermal_contact(n=55):
+    """Тепловое равновесие: горячий и холодный газ, разделённые твёрдой стенкой.
+
+    Атомы стенки колеблются около своих мест и передают энергию от быстрых молекул
+    слева медленным молекулам справа. Средние кинетические энергии двух газов
+    выравниваются — это и есть установление теплового равновесия (§ 4 учебника).
+    Молекулы через стенку не проходят: переходит только энергия.
+    """
+    controls = '<div class="ps-row">' + _buttons() + "</div>"
+    return _build(
+        "Два газа за стенкой: как устанавливается тепловое равновесие",
+        _CONTACT,
+        {"n": n, "rg": 4.0, "rw": 6.0, "mw": 3.0, "kt": 0.06, "wallStep": 13,
+         "vHot": 2.2, "vCold": 0.8, "boxH": 250, "sub": 2, "eps": 0.02},
+        controls,
+        hint="Цвет молекулы показывает её скорость. Следите за графиком: красная и синяя "
+             "линии сходятся к одному уровню и дальше лишь колеблются около него.",
+        height=340,
+    )
+
+
+_PISTON = """
+  // Газ под поршнем. Поршень движется — молекулы, отскакивая от него, меняют скорость:
+  // при сжатии ускоряются, при расширении замедляются. Это изменение внутренней
+  // энергии совершением работы. Дно можно сделать горячим или холодным — тогда
+  // энергия меняется теплопередачей.
+  const W = cv.width, BOX_H = P.boxH, GR_H = cv.height - P.boxH, r = P.r;
+  const X0 = 60, X1 = W - 60;                          // стенки цилиндра
+  let gas = [], piston = 16, target = 16, hist = [], frame = 0, dno = 0, ke0 = 1;
+  function pistonY(vol) { return BOX_H - vol / 100 * (BOX_H - 16); }
+  function avgKE() { let s = 0; for (const p of gas) s += 0.5 * (p.vx * p.vx + p.vy * p.vy); return s / gas.length; }
+  function init() {
+    gas = []; hist = []; frame = 0; dno = 0;
+    el("vol").value = 100; piston = target = pistonY(100);
+    for (let i = 0; i < P.n; i++) {
+      const a = Math.random() * 2 * Math.PI, s = P.v0 * (0.7 + 0.6 * Math.random());
+      gas.push({ x: X0 + r + Math.random() * (X1 - X0 - 2 * r), y: piston + r + Math.random() * (BOX_H - piston - 2 * r),
+                 vx: s * Math.cos(a), vy: s * Math.sin(a) });
+    }
+    ke0 = avgKE();
+    const b = el("dno"); if (b) b.textContent = "Нагреть дно";
+  }
+  function collide(p, q) {
+    const dx = q.x - p.x, dy = q.y - p.y, d2 = dx * dx + dy * dy;
+    if (d2 >= 4 * r * r || d2 === 0) return;
+    const d = Math.sqrt(d2), nx = dx / d, ny = dy / d;
+    const vn = (p.vx - q.vx) * nx + (p.vy - q.vy) * ny;
+    if (vn <= 0) return;
+    p.vx -= vn * nx; p.vy -= vn * ny; q.vx += vn * nx; q.vy += vn * ny;
+    const push = (2 * r - d) / 2 + 0.1;
+    p.x -= nx * push; p.y -= ny * push; q.x += nx * push; q.y += ny * push;
+  }
+  function step() {
+    frame++;
+    target = pistonY(+el("vol").value);
+    const u = Math.sign(target - piston) * Math.min(P.u, Math.abs(target - piston));
+    piston += u;
+    for (const p of gas) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < X0 + r) { p.x = X0 + r; p.vx = Math.abs(p.vx); }
+      if (p.x > X1 - r) { p.x = X1 - r; p.vx = -Math.abs(p.vx); }
+      if (p.y > BOX_H - r) {                          // дно
+        p.y = BOX_H - r; p.vy = -Math.abs(p.vy);
+        if (dno !== 0) {                              // горячее или холодное дно
+          const s = Math.hypot(p.vx, p.vy) || 1e-6;
+          const want = dno > 0 ? P.vHot : P.vCold;
+          const k = 1 + 0.9 * (want / s - 1);
+          p.vx *= k; p.vy *= k;
+        }
+      }
+      if (p.y < piston + r && p.vy - u < 0) {         // удар о движущийся поршень
+        p.y = piston + r;
+        p.vy = 2 * u - p.vy;
+      }
+    }
+    for (let i = 0; i < gas.length; i++) for (let j = i + 1; j < gas.length; j++) collide(gas[i], gas[j]);
+    if (frame % 3 === 0) { hist.push(avgKE() / ke0); if (hist.length > 250) hist.shift(); }
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, W, BOX_H);
+    // цилиндр
+    ctx.strokeStyle = "#5b6570"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(X0, 4); ctx.lineTo(X0, BOX_H); ctx.lineTo(X1, BOX_H); ctx.lineTo(X1, 4); ctx.stroke();
+    if (dno !== 0) { ctx.strokeStyle = dno > 0 ? "#d1495b" : "#3a8fb7"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(X0, BOX_H); ctx.lineTo(X1, BOX_H); ctx.stroke(); }
+    // поршень
+    ctx.fillStyle = "#8a94a0"; ctx.fillRect(X0 + 1, piston - 10, X1 - X0 - 2, 10);
+    ctx.fillRect(W / 2 - 5, 0, 10, piston - 10);
+    for (const p of gas) {
+      const t = Math.max(0, Math.min(1, Math.hypot(p.vx, p.vy) / (P.v0 * 2.2)));
+      ctx.fillStyle = "rgb(" + Math.round(60 + 170 * t) + "," + Math.round(120 - 60 * t) + "," + Math.round(200 - 150 * t) + ")";
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.fill();
+    }
+    const y0 = BOX_H + 8, h = GR_H - 22;
+    ctx.strokeStyle = "#c9ced6"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(34, y0); ctx.lineTo(W - 6, y0); ctx.moveTo(34, y0 + h); ctx.lineTo(W - 6, y0 + h); ctx.stroke();
+    ctx.fillStyle = "#5b6570"; ctx.font = "11px system-ui";
+    ctx.fillText("внутренняя энергия газа (усл. ед.)", 40, y0 + 12); ctx.fillText("время →", W - 60, y0 + h + 14);
+    ctx.strokeStyle = "#d1495b"; ctx.lineWidth = 1.8; ctx.beginPath();
+    hist.forEach((v, i) => { const X = 34 + i / 250 * (W - 40), Y = y0 + h * (1 - Math.min(1, v / 3)); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+    ctx.stroke();
+    el("vol-v").textContent = el("vol").value + " %";
+    const ke = avgKE() / ke0;
+    out.textContent = "Объём газа: " + el("vol").value + " %   ·   средняя кинетическая энергия молекул: "
+      + ke.toFixed(2) + " от начальной"
+      + (Math.abs(u_last()) > 0.01 ? "   ·   поршень движется — над газом совершается работа" : (dno ? "   ·   идёт теплопередача через дно" : ""));
+  }
+  function u_last() { return target - piston; }
+  const db = el("dno");
+  if (db) db.onclick = () => {
+    dno = dno === 0 ? 1 : (dno === 1 ? -1 : 0);
+    db.textContent = dno === 0 ? "Нагреть дно" : (dno === 1 ? "Охладить дно" : "Убрать нагрев");
+  };
+"""
+
+
+def piston(n=80):
+    """Два способа изменить внутреннюю энергию газа: работа и теплопередача.
+
+    Ползунок двигает поршень. При сжатии молекулы, отскакивая от движущегося
+    навстречу поршня, ускоряются — газ нагревается, хотя тепло ему никто не передавал.
+    При расширении замедляются. Кнопка делает дно горячим или холодным — тогда
+    энергия меняется теплопередачей, без всякой работы. Это два способа из § 6.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("vol", "Объём газа:", 30, 100, 100, 1, " %")
+        + '<button data-name="dno">Нагреть дно</button>'
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "Газ под поршнем: работа и теплопередача",
+        _PISTON,
+        {"n": n, "r": 4.0, "v0": 1.4, "u": 1.2, "vHot": 3.2, "vCold": 0.6, "boxH": 250},
+        controls,
+        hint="Сожмите газ быстро и посмотрите на график. Потом верните поршень. "
+             "Затем оставьте поршень на месте и нагрейте дно — энергия растёт и без работы.",
+        height=340,
+    )
+
+
+_CONDUCTION = """
+  // Два стержня из атомов, связанных пружинами. Левый край каждого стержня греется,
+  // правый — охлаждается. Энергия колебаний передаётся от атома к атому — это и есть
+  // теплопроводность. В верхнем стержне связи жёсткие (металл), в нижнем — слабые.
+  const W = cv.width, COLS = P.cols, ROWS = P.rows, A = P.a, DT = P.dt;
+  let rods = [];
+  function kWeak() { return +el("k2").value / 100; }
+  function makeRod(y0, k) {
+    const nodes = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const x = P.x0 + c * A, y = y0 + r * A;
+      nodes.push({ x: x, y: y, hx: x, hy: y, vx: 0, vy: 0, m: 0.7 + 0.6 * Math.random(), T: 0, c: c });
+    }
+    return { nodes: nodes, k: k, y0: y0 };
+  }
+  function init() {
+    rods = [makeRod(P.y1, P.kStrong), makeRod(P.y2, kWeak())];
+  }
+  function force(rod) {
+    const n = rod.nodes, k = rod.k;
+    for (const q of n) { q.fx = -P.kh * (q.x - q.hx); q.fy = -P.kh * (q.y - q.hy); }
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const i = r * COLS + c, p = n[i];
+      for (const j of [c + 1 < COLS ? i + 1 : -1, r + 1 < ROWS ? i + COLS : -1]) {
+        if (j < 0) continue;
+        const q = n[j], dx = q.x - p.x, dy = q.y - p.y, d = Math.hypot(dx, dy) || 1e-6;
+        const f = k * (d - A);
+        p.fx += f * dx / d; p.fy += f * dy / d; q.fx -= f * dx / d; q.fy -= f * dy / d;
+      }
+    }
+  }
+  function gauss() { return (Math.random() + Math.random() + Math.random() - 1.5) * 1.63; }
+  function step() {
+    rods[1].k = kWeak();
+    for (let s = 0; s < P.sub; s++) for (const rod of rods) {
+      force(rod);
+      for (const q of rod.nodes) {
+        if (q.c === 0) {                                  // горячий край: атомы дрожат около мест
+          q.x = q.hx + gauss() * P.ampHot; q.y = q.hy + gauss() * P.ampHot;
+          q.vx = q.vy = 0; q.T = 0.5 * P.vHot * P.vHot; continue;
+        }
+        q.vx += q.fx / q.m * DT; q.vy += q.fy / q.m * DT;
+        if (q.c >= COLS - 3) { q.vx *= P.cool; q.vy *= P.cool; }   // холодный край забирает энергию
+        q.x += q.vx * DT; q.y += q.vy * DT;
+        q.T = 0.97 * q.T + 0.03 * 0.5 * q.m * (q.vx * q.vx + q.vy * q.vy);
+      }
+    }
+  }
+  function tempAt(rod, c) {
+    let s = 0; for (let r = 0; r < ROWS; r++) s += rod.nodes[r * COLS + c].T; return s / ROWS;
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, cv.height);
+    ctx.fillStyle = "#fbfcfd"; ctx.fillRect(0, 0, W, cv.height);
+    const Tref = P.vHot * P.vHot;                  // масштаб для цвета
+    rods.forEach((rod, idx) => {
+      for (const q of rod.nodes) {
+        const t = Math.max(0, Math.min(1, q.T / Tref));
+        ctx.fillStyle = "rgb(" + Math.round(50 + 200 * t) + "," + Math.round(90 + 40 * (1 - t) - 60 * t) + "," + Math.round(210 - 190 * t) + ")";
+        ctx.beginPath(); ctx.arc(q.x, q.y, A * 0.36, 0, 7); ctx.fill();
+      }
+      ctx.fillStyle = "#5b6570"; ctx.font = "12px system-ui";
+      ctx.fillText(idx === 0 ? "жёсткие связи (металл)" : "слабые связи (дерево, пластик)", P.x0, rod.y0 - 10);
+      ctx.fillText("нагрев", 8, rod.y0 + A * (ROWS - 1) / 2 + 4);
+      ctx.fillText("холод", W - 46, rod.y0 + A * (ROWS - 1) / 2 + 4);
+    });
+    el("k2-v").textContent = kWeak().toFixed(2);
+    const c = Math.floor(COLS * 0.75);
+    out.textContent = "Нагрев на ¾ длины стержня (усл. ед.):  металл " + (tempAt(rods[0], c) / Tref).toFixed(2)
+      + "   ·   слабые связи " + (tempAt(rods[1], c) / Tref).toFixed(2)
+      + "   ·   чем жёстче связь между атомами, тем быстрее передаётся энергия колебаний";
+  }
+"""
+
+
+def conduction(cols=44, rows=5):
+    """Теплопроводность: колебания атомов передаются по цепочке связей.
+
+    Атомы двух стержней связаны пружинами. Левые концы греются, правые
+    охлаждаются. В стержне с жёсткими связями (металл) энергия колебаний бежит
+    к дальнему концу быстро, со слабыми связями — медленно. Это механизм
+    теплопроводности из § 7 учебника: сами атомы остаются на местах, переносится
+    только энергия.
+    """
+    controls = (
+        '<div class="ps-row">'
+        + _slider("k2", "Жёсткость связей в нижнем стержне:", 4, 100, 14, 1)
+        + _buttons()
+        + "</div>"
+    )
+    return _build(
+        "Теплопроводность двух стержней",
+        _CONDUCTION,
+        {"cols": cols, "rows": rows, "a": 14.0, "x0": 60, "y1": 30, "y2": 30 + rows * 14 + 34,
+         "dt": 0.25, "kStrong": 1.0, "kh": 0.01, "vHot": 1.6, "ampHot": 1.3, "cool": 0.90, "sub": 2},
+        controls,
+        hint="Красный — горячо, синий — холодно. Нагрев доходит до дальнего конца "
+             "верхнего стержня, пока нижний ещё холодный. Увеличьте жёсткость связей "
+             "в нижнем — он станет «металлом».",
+        height=230,
+    )

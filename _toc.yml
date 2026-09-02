@@ -20,6 +20,13 @@ parts:
       - file: grade8/lessons/06-smachivanie-i-kapillyary
       - file: grade8/lessons/07-teplovoe-rasshirenie
 
+  - caption: 8 класс · Тепловые процессы
+    chapters:
+      - file: grade8/lessons/08-temperatura
+      - file: grade8/lessons/09-vnutrennyaya-energiya
+      - file: grade8/lessons/10-vidy-teploperedachi
+      - file: grade8/lessons/11-konferentsiya
+
   - caption: 8 класс · Самостоятельные работы
     chapters:
       - file: grade8/samostoyatelnye/sr-01-stroenie-veshchestva
