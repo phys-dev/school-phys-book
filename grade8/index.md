@@ -113,6 +113,7 @@
 | 1 | 1–2 | [Строение вещества](samostoyatelnye/sr-01-stroenie-veshchestva.md) |
 | 2 | 3–5 | [Агрегатные состояния вещества](samostoyatelnye/sr-02-agregatnye-sostoyaniya.md) |
 | 3 | 6–7 | [Смачивание, капиллярность, тепловое расширение](samostoyatelnye/sr-03-smachivanie-rasshirenie.md) |
+| 4 | 8–10 | [Температура, внутренняя энергия, теплопередача](samostoyatelnye/sr-04-teplovye-protsessy.md) |
 
 Рабочая программа контрольных работ в теме «Строение вещества» не предусматривает,
 поэтому самостоятельные — текущий контроль на усмотрение учителя.

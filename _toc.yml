@@ -32,3 +32,4 @@ parts:
       - file: grade8/samostoyatelnye/sr-01-stroenie-veshchestva
       - file: grade8/samostoyatelnye/sr-02-agregatnye-sostoyaniya
       - file: grade8/samostoyatelnye/sr-03-smachivanie-rasshirenie
+      - file: grade8/samostoyatelnye/sr-04-teplovye-protsessy
